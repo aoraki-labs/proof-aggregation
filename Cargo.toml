@@ -1,0 +1,43 @@
+[package]
+name = "proof-aggregation"
+version = "0.1.0"
+edition = "2021"
+authors = ["hao <hao@aoraki-labs.io>"]
+
+
+[dependencies]
+zkevm-circuits = { path = "../zkevm-circuits/zkevm-circuits", features = ["test"] }
+keccak256 = { path = "../zkevm-circuits/keccak256" }
+bus-mapping = { path = "../zkevm-circuits/bus-mapping" }
+eth-types = { path = "../zkevm-circuits/eth-types" }
+
+
+tokio = { version = "1.22", features = ["full"] }
+rand = "0.8"
+itertools = "0.10"
+ark-std = { version = "0.3", features = ["print-trace"] }
+clap = { version = "4.0", features = ["derive"] }
+ethers-providers = "0.17.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hex = "0.4.3"
+
+
+halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2022_10_22" }
+snark-verifier = { git = "https://github.com/privacy-scaling-explorations/snark-verifier", tag = "v2022_12_23", default-features = false, features = [
+  "loader_evm",
+  "loader_halo2",
+  "system_halo2",
+] }
+
+[patch."https://github.com/privacy-scaling-explorations/halo2.git"]
+halo2_proofs = { git = "https://github.com/smtmfft/halo2.git", rev = "50ee8ad785c53232824e60b4ff6df32b69970358" }
+
+[profile.release]
+opt-level = 3
+debug = false
+debug-assertions = true
+overflow-checks = true
+rpath = false
+lto = "thin"
+incremental = false
