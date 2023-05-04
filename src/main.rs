@@ -1,14 +1,12 @@
 // Taiko using only PI circuit
 
 use ark_std::{end_timer, start_timer};
-use eth_types::{Bytes, U256};
-use rand::rngs::OsRng;
-use itertools::Itertools;
-
-use std::env::var;
-use std::fs::{self, File};
-use std::{io::Write, rc::Rc};
-
+use bus_mapping::{
+    circuit_input_builder::{BuilderClient, CircuitsParams},
+    Error,
+    rpc::GethClient,
+};
+use ethers_providers::Http;
 use halo2_proofs::{
     dev::MockProver,
     halo2curves::bn256::{Fq, Bn256, Fr, G1Affine},
@@ -25,25 +23,23 @@ use halo2_proofs::{
     poly::VerificationStrategy,
     transcript::{TranscriptReadBuffer, TranscriptWriterBuffer},
 };
+use itertools::Itertools;
+use rand::rngs::OsRng;
+use serde::{Deserialize, Serialize};
 use snark_verifier::{
     loader::evm::{self, encode_calldata, Address, EvmLoader, ExecutorBuilder},
     pcs::kzg::{Gwc19, KzgAs},
     system::halo2::{compile, transcript::evm::EvmTranscript, Config},
     verifier::{self, SnarkVerifier},
 };
-use zkevm_circuits::pi_circuit2::{PiCircuit, PiTestCircuit, PublicData};
-use zkevm_circuits::util::SubCircuit;
-
-use bus_mapping::circuit_input_builder::{BuilderClient, CircuitsParams};
-use bus_mapping::rpc::GethClient;
-use bus_mapping::Error;
-use clap::Parser;
-use ethers_providers::Http;
-use serde::{Deserialize, Serialize};
+use std::fs;
+use std::rc::Rc;
 use std::str::FromStr;
-use zkevm_circuits::evm_circuit::witness::block_convert;
-use zkevm_circuits::tx_circuit::PrimeField;
-
+use zkevm_circuits::{
+    evm_circuit::witness::block_convert,
+    pi_circuit2::{PiCircuit, PiTestCircuit, PublicData},
+    util::SubCircuit,
+};
 
 type PlonkVerifier = verifier::plonk::PlonkVerifier<KzgAs<Bn256, Gwc19>>;
 
@@ -100,7 +96,6 @@ fn gen_evm_verifier(
     params: &ParamsKZG<Bn256>,
     vk: &VerifyingKey<G1Affine>,
     num_instance: Vec<usize>,
-    yul_file_name: Option<String>,
 ) -> Vec<u8> {
     let protocol = compile(
         params,
@@ -116,12 +111,6 @@ fn gen_evm_verifier(
     let instances = transcript.load_instances(num_instance);
     let proof = PlonkVerifier::read_proof(&vk, &protocol, &instances, &mut transcript).unwrap();
     PlonkVerifier::verify(&vk, &protocol, &instances, &proof).unwrap();
-
-    let file_path = &yul_file_name.unwrap_or(String::from("./PlonkEvmVerifier.sol"));
-    File::create(file_path)
-        .expect(file_path)
-        .write_all(&loader.yul_code().as_bytes())
-        .expect(file_path);
 
     evm::compile_yul(&loader.yul_code())
 }
@@ -194,67 +183,6 @@ fn gen_proof<C: Circuit<Fr>>(
     proof
 }
 
-use std::path::Path;
-
-pub fn write_pk(pk_file_path: &Path, pk: &ProvingKey<G1Affine>) -> Result<(), std::io::Error> {
-    let dir = pk_file_path.parent().unwrap();
-    fs::create_dir_all(dir).expect(format!("create {:?}", dir).as_str());
-    let mut file = fs::File::create(&pk_file_path)?;
-    pk.write(&mut file)
-}
-
-pub fn read_pk<C: Circuit<Fr>>(
-    pk_file_path: &str,
-    params: &ParamsKZG<Bn256>,
-) -> Result<ProvingKey<G1Affine>, std::io::Error> {
-    let mut file = fs::File::open(&pk_file_path)?;
-    ProvingKey::<G1Affine>::read::<File, C>(&mut file, params)
-}
-
-#[cfg(feature = "load_pk")]
-mod cfg {
-    pub const LOAD_PK: bool = true;
-    pub const SAVE_PK: bool = true;
-}
-#[cfg(not(feature = "load_pk"))]
-mod cfg {
-    pub const LOAD_PK: bool = false;
-    pub const SAVE_PK: bool = false;
-}
-
-fn load_circuit_pk<C: Circuit<Fr>>(
-    pk_name: &str,
-    params: &ParamsKZG<Bn256>,
-    circuit: &C,
-) -> Result<ProvingKey<G1Affine>, halo2_proofs::plonk::Error> {
-    let pk_file_path = Path::new("./generated/keys").join(pk_name);
-    if pk_file_path.exists() && cfg::LOAD_PK {
-        read_pk::<C>(pk_file_path.to_str().unwrap(), params).map_err(|e| e.into())
-    } else {
-        let pk = keygen_pk(params, keygen_vk(params, circuit).unwrap(), circuit)?;
-        if cfg::SAVE_PK {
-            write_pk(pk_file_path.as_path(), &pk)?;
-        }
-        Ok(pk)
-    }
-}
-
-
-#[derive(Parser, Debug)]
-#[clap(version, about)]
-pub(crate) struct ProverCmdConfig {
-    /// geth_url
-    geth_url: Option<String>,
-    /// block_num
-    block_num: Option<u64>,
-    /// prover address
-    address: Option<String>,
-    /// generate yul
-    yul_output: Option<String>,
-    /// output_file
-    output: Option<String>,
-}
-
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct CircuitConfig {
     pub block_gas_limit: usize,
@@ -268,71 +196,28 @@ pub struct CircuitConfig {
     pub keccak_padding: usize,
 }
 
-// // from zkevm-chain
-// macro_rules! select_circuit_config {
-//     ($txs:expr, $on_match:expr, $on_error:expr) => {
-//         match $txs {
-//             0..=10 => {
-//                 const CIRCUIT_CONFIG: CircuitConfig = CircuitConfig {
-//                     block_gas_limit: 6300000,
-//                     max_txs: 10,
-//                     max_calldata: 131072,
-//                     max_bytecode: 131072,
-//                     max_rws: 3161966,
-//                     min_k: 19,
-//                     pad_to: 2097152,
-//                     min_k_aggregation: 26,
-//                     keccak_padding: 336000,
-//                 };
-//                 $on_match
-//             }
-//             16..=80 => {
-//                 const CIRCUIT_CONFIG: CircuitConfig = CircuitConfig {
-//                     block_gas_limit: 6300000,
-//                     max_txs: 80,
-//                     max_calldata: 697500,
-//                     max_bytecode: 139500,
-//                     max_rws: 3161966,
-//                     min_k: 21,
-//                     pad_to: 2097152,
-//                     min_k_aggregation: 26,
-//                     keccak_padding: 1600000,
-//                 };
-//                 $on_match
-//             }
+const CIRCUIT_CONFIG: CircuitConfig = CircuitConfig {
+    block_gas_limit: 6300000,
+    max_txs: 10,
+    max_calldata: 131072,
+    max_bytecode: 131072,
+    max_rws: 3161966,
+    min_k: 19,
+    pad_to: 2097152,
+    min_k_aggregation: 26,
+    keccak_padding: 336000,
+};
 
-//             _ => $on_error,
-//         }
-//     };
-// }
+async fn gen_data(block_num: u64, address: &str, geth_url: &str) -> Result<PublicData<Fr>, Error> {
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    // let txs: u32 = var("TXS")
-    //     .unwrap_or_else(|_| "21".to_string())
-    //     .parse()
-    //     .expect("Cannot parse TXS env var as u32");
-
-    let config = ProverCmdConfig::parse();
-    let block_num = config.block_num.map_or_else(|| 1, |n| n);
     let prover = eth_types::Address::from_slice(
-        &hex::decode(config.address.expect("needs prover").as_bytes()).expect("parse_address"),
+        &hex::decode(address.as_bytes()).expect("parse_address"),
     );
 
-    let provider = Http::from_str(&config.geth_url.unwrap()).expect("Http geth url");
+    let provider = Http::from_str(geth_url).expect("Http geth url");
     let geth_client = GethClient::new(provider);
 
-    const CIRCUIT_CONFIG: CircuitConfig = CircuitConfig {
-        block_gas_limit: 6300000,
-        max_txs: 10,
-        max_calldata: 131072,
-        max_bytecode: 131072,
-        max_rws: 3161966,
-        min_k: 19,
-        pad_to: 2097152,
-        min_k_aggregation: 26,
-        keccak_padding: 336000,
-    };
+    
 
     let circuit_params = CircuitsParams {
         max_rws: CIRCUIT_CONFIG.max_rws,
@@ -345,8 +230,24 @@ async fn main() -> Result<(), Error> {
     let builder = BuilderClient::new(geth_client, circuit_params.clone()).await?;
     let (builder, _) = builder.gen_inputs(block_num).await?;
     let block = block_convert(&builder.block, &builder.code_db).unwrap();
-    let public_data = PublicData::new(&block, prover);
     
+    Ok(PublicData::new(&block, prover))
+
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+
+    let (block_num, address, geth_url) = (
+        5,
+        "E743762B9F3C162E470Ad05e7a51328606f270cf",
+        "http://3.132.151.8:8545"
+    );
+
+    let public_data = gen_data(block_num, address, geth_url).await?;
+
+    let params = get_circuit_params::<0>(CIRCUIT_CONFIG.min_k as usize);
+
     let circuit =
         PiTestCircuit::<Fr, { CIRCUIT_CONFIG.max_txs }, { CIRCUIT_CONFIG.max_calldata }>(
             PiCircuit::new(
@@ -355,69 +256,25 @@ async fn main() -> Result<(), Error> {
                 public_data,
             ),
         );
-    
-    let params = get_circuit_params::<0>(CIRCUIT_CONFIG.min_k as usize);
 
-    // let pk = keygen_pk(&params, keygen_vk(&params, &circuit).unwrap(),
-    // &circuit).unwrap();
-    let pk: ProvingKey<G1Affine> = {
-        let key_file_name = format!(
-            "{}-{}",
-            "taiko", block_num
-        );
-        load_circuit_pk(&key_file_name, &params, &circuit).unwrap()
-    };
+    let pk = keygen_pk(&params, keygen_vk(&params, &circuit).unwrap(), &circuit).unwrap();
 
-    // let deployment_code = if config.yul_output.is_some() {
-    //     gen_evm_verifier(
-    //             &params,
-    //             pk.get_vk(),
-    //             PiTestCircuit::<
-    //                 Fr,
-    //                 { CIRCUIT_CONFIG.max_txs },
-    //                 { CIRCUIT_CONFIG.max_calldata },
-    //             >::num_instance(),
-    //             config.yul_output
-    //         )
-    // } else {
-    //     vec![]
-    // };
+    let deployment_code = gen_evm_verifier(
+        &params,
+        pk.get_vk(),
+        PiTestCircuit::<
+            Fr,
+            { CIRCUIT_CONFIG.max_txs },
+            { CIRCUIT_CONFIG.max_calldata },
+        >::num_instance()
+    );
 
     let start = start_timer!(|| "EVM circuit Proof verification");
     let proof = gen_proof(&params, &pk, circuit.clone(), circuit.instances());
     end_timer!(start);
 
+    evm_verify(deployment_code, circuit.instances(), proof.clone());
+
     Ok(())
-
-    // if !deployment_code.is_empty() {
-    //     evm_verify(deployment_code, circuit.instances(), proof.clone());
-    // }
-
-    // #[derive(Serialize, Deserialize, Debug)]
-    // struct BlockProofData {
-    //     instances: Vec<U256>,
-    //     proof: Bytes,
-    // }
-
-    // let block_proof_data = BlockProofData {
-    //     instances: circuit
-    //         .instances()
-    //         .iter()
-    //         .flatten()
-    //         .map(|v| U256::from_little_endian(v.to_repr().as_ref()))
-    //         .collect(),
-    //     proof: proof.into(),
-    // };
-
-    // let output_file = if let Some(output) = config.output {
-    //     output
-    // } else {
-    //     format!("./block-{}_proof.json", block_num)
-    // };
-    // File::create(output_file)
-    //     .expect("open output_file")
-    //     .write_all(&serde_json::to_vec(&block_proof_data).unwrap())
-    //     .expect("write output_file");
-    
 
 }

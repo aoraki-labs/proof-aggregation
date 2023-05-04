@@ -2,13 +2,15 @@ cargo build --profile release --package proof-aggregation --bin proof-aggregatio
 
 cp ./target/release/proof-aggregation .
 
-export GETH_URL=http://3.132.151.8:8545
-export BLOCK_NUM=5
-export ADDRESS=E743762B9F3C162E470Ad05e7a51328606f270cf
-export TXS=4
-export RUST_BACKTRACE=1 # RUST_BACKTRACE=full to see more backtrace in verbose
+./proof-aggregation
 
-./proof-aggregation ${GETH_URL} ${BLOCK_NUM} ${ADDRESS}
+# export GETH_URL=http://3.132.151.8:8545
+# export BLOCK_NUM=5
+# export ADDRESS=E743762B9F3C162E470Ad05e7a51328606f270cf
+# export TXS=4
+# export RUST_BACKTRACE=1 # RUST_BACKTRACE=full to see more backtrace in verbose
+
+# ./proof-aggregation ${GETH_URL} ${BLOCK_NUM} ${ADDRESS}
 
 # Arguments:
 #   [GETH_URL]    geth_url
