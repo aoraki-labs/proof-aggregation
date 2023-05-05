@@ -512,26 +512,33 @@ fn evm_verify(deployment_code: Vec<u8>, instances: Vec<Vec<Fr>>, proof: Vec<u8>)
 
 fn main()  {
 
-    let timer1 = start_timer!(|| "timer 1");
+    let timer1 = start_timer!(|| "timer 1"); // 30.101s
     let (params, params_app) = gen_circuit_params::<0>(22, 19);
     end_timer!(timer1);
 
-    let timer2 = start_timer!(|| "timer 2");
+    let timer2 = start_timer!(|| "timer 2"); // 97.902s
     let zkevm_snarks = [(); 2].map(|_| gen_zkevm_snark(&params_app));
     end_timer!(timer2);
 
-    let timer3 = start_timer!(|| "timer 3");
+    let timer3 = start_timer!(|| "timer 3"); // 132.726s
     let agg_circuit = aggregation::AggregationCircuit::new(&params, zkevm_snarks);
     let pk = gen_pk(&params, &agg_circuit);
+    let deployment_code = gen_aggregation_evm_verifier(
+        &params,
+        pk.get_vk(),
+        aggregation::AggregationCircuit::num_instance(),
+        aggregation::AggregationCircuit::accumulator_indices(),
+    );
     end_timer!(timer3);
 
-    let timer4 = start_timer!(|| "timer 4");
+    let timer4 = start_timer!(|| "timer 4"); // 274.205s
     let proof = gen_proof::<_, _, EvmTranscript<G1Affine, _, _, _>, EvmTranscript<G1Affine, _, _, _>>(
         &params,
         &pk,
         agg_circuit.clone(),
         agg_circuit.instances(),
     );
+    evm_verify(deployment_code, agg_circuit.instances(), proof);
     end_timer!(timer4);
     
     // zkevm_circuit::test_basic_pi_circuit();
