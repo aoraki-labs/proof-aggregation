@@ -1,39 +1,40 @@
-
 pub mod zkevm_circuit;
 
-use eth_types::Word;
+use halo2_curves::bn256::Fq;
 use halo2_proofs::{
-    arithmetic::Field,
     halo2curves::bn256::{Bn256, Fr, G1Affine},
-    plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, ProvingKey},
+    plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, ProvingKey, VerifyingKey},
     poly::{
         commitment::{ParamsProver, Params},
         kzg::{
-            commitment::{KZGCommitmentScheme, ParamsKZG, ParamsVerifierKZG},
-            multiopen::{ProverSHPLONK, VerifierSHPLONK, ProverGWC, VerifierGWC},
-            strategy::{SingleStrategy, AccumulatorStrategy},
+            commitment::{KZGCommitmentScheme, ParamsKZG},
+            multiopen::{ProverGWC, VerifierGWC},
+            strategy::AccumulatorStrategy,
         }, VerificationStrategy,
     },
     transcript::{
-        Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer, EncodedChallenge,
+        TranscriptReadBuffer, TranscriptWriterBuffer, EncodedChallenge,
     }, dev::MockProver,
 };
 use itertools::Itertools;
-use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
-use rand_xorshift::XorShiftRng;
 use zkevm_circuits::{
-    pi_circuit::{PiCircuit, PiTestCircuit, PublicData},
+    pi_circuit::PiTestCircuit,
     util::SubCircuit,
 };
 
 use snark_verifier::{
-    system::halo2::{compile, transcript::evm::EvmTranscript, Config}, loader::native::NativeLoader,
+    system::halo2::{compile, transcript::evm::EvmTranscript, Config}, loader::{native::NativeLoader, evm::{EvmLoader, self, encode_calldata, ExecutorBuilder, Address}}, pcs::kzg::{KzgAs, Gwc19, LimbsEncoding}, verifier::{self, SnarkVerifier},
 };
-use std::{fs, io::Cursor};
+use std::{fs, io::Cursor, rc::Rc};
 use rand::rngs::OsRng;
+use ark_std::{end_timer, start_timer};
 
+const LIMBS: usize = 4;
+const BITS: usize = 68;
 
+type As = KzgAs<Bn256, Gwc19>;
+type PlonkSuccinctVerifier = verifier::plonk::PlonkSuccinctVerifier<As, LimbsEncoding<LIMBS, BITS>>;
+type PlonkVerifier = verifier::plonk::PlonkVerifier<As, LimbsEncoding<LIMBS, BITS>>;
 
 
 fn write_params(degree: usize, params: &ParamsKZG<Bn256>) -> Result<(), std::io::Error> {
@@ -124,35 +125,28 @@ fn gen_proof<
 }
 
 mod aggregation {
-    // use super::{As, PlonkSuccinctVerifier, BITS, LIMBS};
+    use super::{As, PlonkSuccinctVerifier, BITS, LIMBS};
     use halo2_curves::bn256::{Bn256, Fq, Fr, G1Affine};
+    
     use halo2_proofs::{
         circuit::{Layouter, SimpleFloorPlanner, Value},
         plonk::{self, Circuit, ConstraintSystem, Error},
         poly::{commitment::ParamsProver, kzg::commitment::ParamsKZG},
     };
-    // use halo2_wrong_ecc::{
-    //     integer::rns::Rns,
-    //     maingate::{
-    //         MainGate, MainGateConfig, MainGateInstructions, RangeChip, RangeConfig,
-    //         RangeInstructions, RegionCtx,
-    //     },
-    //     EccConfig,
-    // };
     use itertools::Itertools;
     use rand::rngs::OsRng;
     use snark_verifier::{
-        loader::{self, native::NativeLoader, halo2::halo2_wrong_ecc::{self, maingate::{MainGateConfig, RangeConfig, MainGate, RangeChip}, EccConfig}},
+        loader::{self, native::NativeLoader, halo2::halo2_wrong_ecc::{self, maingate::{MainGateConfig, RangeConfig, MainGate, RangeChip, RegionCtx, RangeInstructions, MainGateInstructions}, EccConfig, integer::rns::Rns}},
         pcs::{
             kzg::{KzgAccumulator, KzgSuccinctVerifyingKey, LimbsEncodingInstructions},
             AccumulationScheme, AccumulationSchemeProver,
         },
         system,
-        util::arithmetic::{fe_to_limbs},
-        verifier::{plonk::{PlonkProtocol, PlonkSuccinctVerifier}, SnarkVerifier},
+        util::arithmetic::{fe_to_limbs, PrimeField},
+        verifier::{plonk::PlonkProtocol, SnarkVerifier},
     };
-    use zkevm_circuits::root_circuit::{LIMBS, BITS};
     use std::rc::Rc;
+
 
     const T: usize = 5;
     const RATE: usize = 4;
@@ -273,7 +267,7 @@ mod aggregation {
     }
 
     impl AggregationConfig {
-        pub fn configure<F: FieldExt>(
+        pub fn configure<F: PrimeField>(
             meta: &mut ConstraintSystem<F>,
             composition_bits: Vec<usize>,
             overflow_bits: Vec<usize>,
@@ -374,6 +368,8 @@ mod aggregation {
     impl Circuit<Fr> for AggregationCircuit {
         type Config = AggregationConfig;
         type FloorPlanner = SimpleFloorPlanner;
+        #[cfg(feature = "halo2_circuit_params")]
+        type Params = ();
 
         fn without_witnesses(&self) -> Self {
             Self {
@@ -466,14 +462,77 @@ fn gen_zkevm_snark(params: &ParamsKZG<Bn256>) -> aggregation::Snark {
     aggregation::Snark::new(protocol, circuit.instance(), proof)
 }
 
+fn gen_aggregation_evm_verifier(
+    params: &ParamsKZG<Bn256>,
+    vk: &VerifyingKey<G1Affine>,
+    num_instance: Vec<usize>,
+    accumulator_indices: Vec<(usize, usize)>,
+) -> Vec<u8> {
+    let protocol = compile(
+        params,
+        vk,
+        Config::kzg()
+            .with_num_instance(num_instance.clone())
+            .with_accumulator_indices(Some(accumulator_indices)),
+    );
+    let vk = (params.get_g()[0], params.g2(), params.s_g2()).into();
+
+    let loader = EvmLoader::new::<Fq, Fr>();
+    let protocol = protocol.loaded(&loader);
+    let mut transcript = EvmTranscript::<_, Rc<EvmLoader>, _, _>::new(&loader);
+
+    let instances = transcript.load_instances(num_instance);
+    let proof = PlonkVerifier::read_proof(&vk, &protocol, &instances, &mut transcript).unwrap();
+    PlonkVerifier::verify(&vk, &protocol, &instances, &proof).unwrap();
+
+    evm::compile_yul(&loader.yul_code())
+}
+
+fn evm_verify(deployment_code: Vec<u8>, instances: Vec<Vec<Fr>>, proof: Vec<u8>) {
+    let calldata = encode_calldata(&instances, &proof);
+    let success = {
+        let mut evm = ExecutorBuilder::default()
+            .with_gas_limit(u64::MAX.into())
+            .build();
+
+        let caller = Address::from_low_u64_be(0xfe);
+        let verifier = evm
+            .deploy(caller, deployment_code.into(), 0.into())
+            .address
+            .unwrap();
+        let result = evm.call_raw(caller, verifier, calldata.into(), 0.into());
+
+        dbg!(result.gas_used);
+
+        !result.reverted
+    };
+    assert!(success);
+}
+
 
 fn main()  {
-    
+
+    let timer1 = start_timer!(|| "timer 1");
     let (params, params_app) = gen_circuit_params::<0>(22, 19);
+    end_timer!(timer1);
 
+    let timer2 = start_timer!(|| "timer 2");
     let zkevm_snarks = [(); 2].map(|_| gen_zkevm_snark(&params_app));
+    end_timer!(timer2);
 
+    let timer3 = start_timer!(|| "timer 3");
+    let agg_circuit = aggregation::AggregationCircuit::new(&params, zkevm_snarks);
+    let pk = gen_pk(&params, &agg_circuit);
+    end_timer!(timer3);
 
-
-    zkevm_circuit::test_basic_pi_circuit();
+    let timer4 = start_timer!(|| "timer 4");
+    let proof = gen_proof::<_, _, EvmTranscript<G1Affine, _, _, _>, EvmTranscript<G1Affine, _, _, _>>(
+        &params,
+        &pk,
+        agg_circuit.clone(),
+        agg_circuit.instances(),
+    );
+    end_timer!(timer4);
+    
+    // zkevm_circuit::test_basic_pi_circuit();
 }

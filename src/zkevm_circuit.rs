@@ -45,9 +45,6 @@ fn generate_publicdata<const MAX_TXS: usize, const MAX_CALLDATA: usize>() -> Pub
 
 pub fn gen_pi_circuit() -> PiTestCircuit<Fr, MAX_TXS, MAX_CALLDATA>{
     
-    // const MAX_TXS: usize = 10;
-    // const MAX_CALLDATA: usize = 128;
-
     let mut rng = ChaCha20Rng::seed_from_u64(42);
     let randomness = Fr::random(&mut rng);
     let rand_rpi = Fr::random(&mut rng);
@@ -86,11 +83,6 @@ impl<const MAX_TXS: usize, const MAX_CALLDATA: usize> InstancesExport
 
 
 pub fn test_basic_pi_circuit() {
-    // let setup_prfx = "crate::constants::SETUP_PREFIX";
-    // let proof_gen_prfx = "crate::constants::PROOFGEN_PREFIX";
-    // let proof_ver_prfx = "crate::constants::PROOFVER_PREFIX";
-    // Unique string used by bench results module for parsing the result
-    // const BENCHMARK_ID: &str = "Pi Circuit";
 
     const MAX_TXS: usize = 10;
     const MAX_CALLDATA: usize = 128;
@@ -125,12 +117,8 @@ pub fn test_basic_pi_circuit() {
         0xbc, 0xe5,
     ]);
 
-    // Bench setup generation
-    // let setup_message = format!("{} {} with degree = {}", BENCHMARK_ID, setup_prfx, degree);
-    // let start1 = start_timer!(|| setup_message);
     let general_params = ParamsKZG::<Bn256>::setup(degree, &mut rng);
     let verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
-    // end_timer!(start1);
 
     // Initialize the proving key
     let vk = keygen_vk(&general_params, &circuit).expect("keygen_vk should not fail");
@@ -138,12 +126,6 @@ pub fn test_basic_pi_circuit() {
     // Create a proof
     let mut transcript: Blake2bWrite<Vec<u8>, G1Affine, Challenge255<G1Affine>> = Blake2bWrite::<_, G1Affine, Challenge255<_>>::init(vec![]);
 
-    // Bench proof generation time
-    // let proof_message = format!(
-    //     "{} {} with degree = {}",
-    //     BENCHMARK_ID, proof_gen_prfx, degree
-    // );
-    // let start2 = start_timer!(|| proof_message);
     create_proof::<
         KZGCommitmentScheme<Bn256>,
         ProverSHPLONK<'_, Bn256>,
@@ -161,10 +143,7 @@ pub fn test_basic_pi_circuit() {
     )
     .expect("proof generation should not fail");
     let proof = transcript.finalize();
-    // end_timer!(start2);
 
-    // Bench verification time
-    // let start3 = start_timer!(|| format!("{} {}", BENCHMARK_ID, proof_ver_prfx));
     let mut verifier_transcript = Blake2bRead::<_, G1Affine, Challenge255<_>>::init(&proof[..]);
     let strategy = SingleStrategy::new(&general_params);
 
@@ -181,6 +160,5 @@ pub fn test_basic_pi_circuit() {
         instances,
         &mut verifier_transcript,
     )
-    .expect("failed to verify bench circuit");
-    // end_timer!(start3);
+    .expect("failed to verify circuit");
 }
