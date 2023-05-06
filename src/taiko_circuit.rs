@@ -13,10 +13,10 @@ use zkevm_circuits::{
     util::SubCircuit,
 };
 
-pub(crate) const MAX_TXS: usize = 10;
-pub(crate) const MAX_CALLDATA: usize = 131072;
-pub(crate) const MAX_BYTECODE: usize = 131072;
-pub(crate) const MAX_RWS: usize = 3161966;
+pub const MAX_TXS: usize = 10;
+pub const MAX_CALLDATA: usize = 131072;
+pub const MAX_BYTECODE: usize = 131072;
+pub const MAX_RWS: usize = 3161966;
 const KECCAK_PADDING: usize = 336000;
 
 pub trait InstancesExport {
@@ -64,3 +64,34 @@ pub(crate) async fn gen_data(block_num: u64, address: &str, geth_url: &str) -> R
     Ok(PublicData::new(&block, prover))
 
 }
+
+
+// #[tokio::main]
+// async fn main() -> Result<(), Error> {
+
+//     let (block_num, address, geth_url, degree) = (
+//         5,
+//         "E743762B9F3C162E470Ad05e7a51328606f270cf",
+//         "http://3.132.151.8:8545",
+//         19
+//     );
+//     let public_data = taiko::gen_data(block_num, address, geth_url).await?;
+
+//     let params = get_circuit_params::<0>(degree as usize);
+
+//     let circuit =
+//         PiTestCircuit::<Fr, { taiko::MAX_TXS }, { taiko::MAX_CALLDATA }>(
+//             PiCircuit::new(
+//                 taiko::MAX_TXS,
+//                 taiko::MAX_CALLDATA,
+//                 public_data,
+//             ),
+//         );
+    
+//     let start = start_timer!(|| "EVM circuit Proof verification");
+//     let proof = gen_proof(&params, &pk, circuit.clone(), circuit.instances());
+//     end_timer!(start);
+
+//     Ok(())
+
+// }

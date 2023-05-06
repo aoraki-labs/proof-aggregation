@@ -162,3 +162,10 @@ pub fn test_basic_pi_circuit() {
     )
     .expect("failed to verify circuit");
 }
+
+
+// fn main()  {
+
+//     zkevm_circuit::test_basic_pi_circuit();
+
+// }
