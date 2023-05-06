@@ -4,16 +4,16 @@ version = "0.1.0"
 edition = "2021"
 authors = ["hao <hao@aoraki-labs.io>"]
 
-
 [dependencies]
-
 halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_04_20" }
+halo2_curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.2", package = "halo2curves" }
+snark-verifier = { git = "https://github.com/privacy-scaling-explorations/snark-verifier", rev = "e5d5e4a" }
 
-zkevm-circuits = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git", package = "zkevm-circuits", features = ["test"] }
-bus-mapping = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git", package = "bus-mapping", features = ["test"] }
-keccak256 = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git", package = "keccak256" }
-eth-types = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git", package = "eth-types" }
-mock = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git", package = "mock" }
+zkevm-circuits = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git", package = "zkevm-circuits", features = ["test"], rev = "b8ae7af" }
+bus-mapping = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git", package = "bus-mapping", features = ["test"], rev = "b8ae7af" }
+keccak256 = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git", package = "keccak256", rev = "b8ae7af" }
+eth-types = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git", package = "eth-types", rev = "b8ae7af" }
+mock = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git", package = "mock", rev = "b8ae7af" }
 
 ark-std = { version = "0.3", features = ["print-trace"] }
 rand_xorshift = "0.3"
@@ -22,10 +22,6 @@ itertools = "0.10"
 env_logger = "0.9"
 ethers-signers = "0.17.0"
 rand_chacha = "0.3"
-
-halo2_curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.2", package = "halo2curves" }
-snark-verifier = { git = "https://github.com/privacy-scaling-explorations/snark-verifier" }
-
 
 [profile.release]
 opt-level = 3

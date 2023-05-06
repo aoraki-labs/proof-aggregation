@@ -217,7 +217,7 @@ fn main()  {
         agg_circuit.clone(),
         agg_circuit.instances(),
     );
-    evm_verify(deployment_code, agg_circuit.instances(), proof);
+    evm_verify(deployment_code, agg_circuit.instances(), proof); // gas_used = 603477
     end_timer!(timer4);
     
 }
