@@ -1,3 +1,4 @@
+use ark_std::{start_timer, end_timer};
 use halo2_curves::bn256::{Bn256, Fq, Fr, G1Affine};
 use halo2_proofs::{
     circuit::{Layouter, SimpleFloorPlanner, Value},
@@ -18,11 +19,16 @@ use snark_verifier::{
 };
 use std::rc::Rc;
 
+/// Number of limbs to decompose a elliptic curve base field element into.
 const LIMBS: usize = 4;
+/// Number of bits of each decomposed limb.
 const BITS: usize = 68;
 
+/// KZG accumulation scheme with GWC19 multiopen.
 type As = KzgAs<Bn256, Gwc19>;
+/// Plonk succinct verifier with `KzgAs`
 type PlonkSuccinctVerifier = verifier::plonk::PlonkSuccinctVerifier<As, LimbsEncoding<LIMBS, BITS>>;
+/// Plonk verifier with `KzgAs` and `LimbsEncoding<LIMBS, BITS>`.
 pub type PlonkVerifier = verifier::plonk::PlonkVerifier<As, LimbsEncoding<LIMBS, BITS>>;
 
 const T: usize = 5;
@@ -30,12 +36,17 @@ const RATE: usize = 4;
 const R_F: usize = 8;
 const R_P: usize = 60;
 
+/// KZG succinct verifying key
 type Svk = KzgSuccinctVerifyingKey<G1Affine>;
+/// for `Halo2Loader`.
 type BaseFieldEccChip = halo2_wrong_ecc::BaseFieldEccChip<G1Affine, LIMBS, BITS>;
+/// `Halo2Loader` with hardcoded `EccChip`.
 type Halo2Loader<'a> = loader::halo2::Halo2Loader<'a, G1Affine, BaseFieldEccChip>;
+/// `PoseidonTranscript` with hardcoded parameter with 128-bits security.
 pub type PoseidonTranscript<L, S> =
     system::halo2::transcript::halo2::PoseidonTranscript<G1Affine, L, S, T, RATE, R_F, R_P>;
 
+/// Snark contains the minimal information for verification
 pub struct Snark {
     protocol: PlonkProtocol<G1Affine>,
     instances: Vec<Vec<Fr>>,
@@ -43,6 +54,7 @@ pub struct Snark {
 }
 
 impl Snark {
+    /// Construct `Snark` with each field.
     pub fn new(
         protocol: PlonkProtocol<G1Affine>,
         instances: Vec<Vec<Fr>>,
@@ -70,6 +82,7 @@ impl From<Snark> for SnarkWitness {
     }
 }
 
+/// SnarkWitness
 #[derive(Clone)]
 pub struct SnarkWitness {
     protocol: PlonkProtocol<G1Affine>,
@@ -78,6 +91,7 @@ pub struct SnarkWitness {
 }
 
 impl SnarkWitness {
+    /// Returns `SnarkWitness` with all witness as `Value::unknown()`.
     fn without_witnesses(&self) -> Self {
         SnarkWitness {
             protocol: self.protocol.clone(),
@@ -95,6 +109,9 @@ impl SnarkWitness {
     }
 }
 
+/// Aggregate snarks into a single accumulator and decompose it into
+/// `4 * LIMBS` limbs.
+/// Fail if any given snarks is invalid.
 pub fn aggregate<'a>(
     svk: &Svk,
     loader: &Rc<Halo2Loader<'a>>,
@@ -144,6 +161,8 @@ pub struct AggregationConfig {
 }
 
 impl AggregationConfig {
+    /// Configure for `MainGate` and `RangeChip` with corresponding fixed lookup
+    /// table.
     pub fn configure<F: PrimeField>(
         meta: &mut ConstraintSystem<F>,
         composition_bits: Vec<usize>,
@@ -158,14 +177,17 @@ impl AggregationConfig {
         }
     }
 
+    /// Returns `MainGate`.
     pub fn main_gate(&self) -> MainGate<Fr> {
         MainGate::new(self.main_gate_config.clone())
     }
 
+    /// Returns `RangeChip`.
     pub fn range_chip(&self) -> RangeChip<Fr> {
         RangeChip::new(self.range_config.clone())
     }
 
+    /// Returns `EccChip`.
     pub fn ecc_chip(&self) -> BaseFieldEccChip {
         BaseFieldEccChip::new(EccConfig::new(
             self.range_config.clone(),
@@ -183,6 +205,7 @@ pub struct AggregationCircuit {
 }
 
 impl AggregationCircuit {
+    /// Create an Aggregation circuit with aggregated accumulator computed.
     pub fn new(params: &ParamsKZG<Bn256>, snarks: impl IntoIterator<Item = Snark>) -> Self {
         let svk = params.get_g()[0].into();
         let snarks = snarks.into_iter().collect_vec();
@@ -204,6 +227,7 @@ impl AggregationCircuit {
             })
             .collect_vec();
 
+        // Create a proof that argues if old AccumulationScheme::Accumulators are properly accumulated into the new one, and returns the new one as output.
         let (accumulator, as_proof) = {
             let mut transcript = PoseidonTranscript::<NativeLoader, _>::new(Vec::new());
             let accumulator =
@@ -225,14 +249,18 @@ impl AggregationCircuit {
         }
     }
 
+    /// Returns accumulator indices in instance columns, which will be in
+    /// the last 4 * LIMBS rows of MainGate's instance column.
     pub fn accumulator_indices() -> Vec<(usize, usize)> {
         (0..4 * LIMBS).map(|idx| (0, idx)).collect()
     }
 
+    /// Returns number of instance
     pub fn num_instance() -> Vec<usize> {
         vec![4 * LIMBS]
     }
 
+    /// Returns instances
     pub fn instances(&self) -> Vec<Vec<Fr>> {
         vec![self.instances.clone()]
     }
@@ -245,8 +273,6 @@ impl AggregationCircuit {
 impl Circuit<Fr> for AggregationCircuit {
     type Config = AggregationConfig;
     type FloorPlanner = SimpleFloorPlanner;
-    #[cfg(feature = "halo2_circuit_params")]
-    type Params = ();
 
     fn without_witnesses(&self) -> Self {
         Self {

@@ -15,7 +15,7 @@ use halo2_proofs::{
     },
     transcript::{
         TranscriptReadBuffer, TranscriptWriterBuffer, EncodedChallenge,
-    }, dev::MockProver,
+    }, dev::MockProver, SerdeFormat,
 };
 use itertools::Itertools;
 use zkevm_circuits::{
@@ -219,5 +219,28 @@ fn main()  {
     );
     evm_verify(deployment_code, agg_circuit.instances(), proof); // gas_used = 603477
     end_timer!(timer4);
+
+
+    // // Change the propagated inner snark's instance
+    // instances[0][0] += Fr::one();
+    // // Then expect the verification to fail
+    // assert_eq!(
+    //     MockProver::run(21, &aggregation, instances)
+    //         .unwrap()
+    //         .verify_par(),
+    //     Err(vec![
+    //         VerifyFailure::Permutation {
+    //             column: (Any::advice(), 0).into(),
+    //             location: FailureLocation::InRegion {
+    //                 region: (1, "Aggregate snarks").into(),
+    //                 offset: 0
+    //             }
+    //         },
+    //         VerifyFailure::Permutation {
+    //             column: (Any::Instance, 0).into(),
+    //             location: FailureLocation::OutsideRegion { row: 0 }
+    //         }
+    //     ])
+    // );
     
 }

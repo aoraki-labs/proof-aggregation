@@ -515,7 +515,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "sha2 0.10.6",
- "sha3 0.10.7",
+ "sha3 0.10.8",
  "thiserror",
 ]
 
@@ -917,7 +917,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.6",
- "sha3 0.10.7",
+ "sha3 0.10.8",
  "thiserror",
  "uuid",
 ]
@@ -940,7 +940,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "sha3 0.10.7",
+ "sha3 0.10.8",
  "strum",
  "strum_macros",
  "subtle",
@@ -959,7 +959,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "sha3 0.10.7",
+ "sha3 0.10.8",
  "thiserror",
  "uint",
 ]
@@ -1761,7 +1761,7 @@ dependencies = [
  "ecdsa 0.14.8",
  "elliptic-curve 0.12.3",
  "sha2 0.10.6",
- "sha3 0.10.7",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -1811,9 +1811,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.142"
+version = "0.2.143"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a987beff54b60ffa6d51982e1aa1146bc42f19bd26be28b0586f252fccf5317"
+checksum = "edc207893e85c5d6be840e969b496b53d94cec8be2d501b214f50daa97fa8024"
 
 [[package]]
 name = "libsecp256k1"
@@ -2260,7 +2260,7 @@ dependencies = [
 [[package]]
 name = "poseidon"
 version = "0.2.0"
-source = "git+https://github.com/privacy-scaling-explorations/poseidon.git?tag=v2023_04_20#807f8f555313f726ca03bdf941f798098f488ba4"
+source = "git+https://github.com/privacy-scaling-explorations/poseidon?tag=v2023_04_20#807f8f555313f726ca03bdf941f798098f488ba4"
 dependencies = [
  "halo2curves",
  "subtle",
@@ -2560,7 +2560,7 @@ dependencies = [
  "primitive-types 0.12.1",
  "revm_precompiles",
  "rlp",
- "sha3 0.10.7",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -2576,7 +2576,7 @@ dependencies = [
  "ripemd",
  "secp256k1 0.27.0",
  "sha2 0.10.6",
- "sha3 0.10.7",
+ "sha3 0.10.8",
  "substrate-bn",
 ]
 
@@ -2598,7 +2598,7 @@ dependencies = [
  "primitive-types 0.12.1",
  "rlp",
  "ruint",
- "sha3 0.10.7",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -2615,7 +2615,7 @@ dependencies = [
  "ripemd",
  "secp256k1 0.24.3",
  "sha2 0.10.6",
- "sha3 0.10.7",
+ "sha3 0.10.8",
  "substrate-bn",
 ]
 
@@ -3053,9 +3053,9 @@ dependencies = [
 
 [[package]]
 name = "sha3"
-version = "0.10.7"
+version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54c2bb1a323307527314a36bfb73f24febb08ce2b8a554bf4ffd6f51ad15198c"
+checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
 dependencies = [
  "digest 0.10.6",
  "keccak",
@@ -3140,7 +3140,7 @@ dependencies = [
  "rand",
  "revm",
  "rlp",
- "sha3 0.10.7",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -3913,7 +3913,7 @@ dependencies = [
  "rand",
  "rand_chacha",
  "rand_xorshift",
- "sha3 0.10.7",
+ "sha3 0.10.8",
  "snark-verifier 0.1.0 (git+https://github.com/privacy-scaling-explorations/snark-verifier?tag=v2023_04_20)",
  "strum",
  "strum_macros",
