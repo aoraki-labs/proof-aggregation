@@ -109,8 +109,7 @@ impl SnarkWitness {
     }
 }
 
-/// Aggregate snarks into a single accumulator and decompose it into
-/// `4 * LIMBS` limbs.
+/// Aggregate snarks into a single accumulator.
 /// Fail if any given snarks is invalid.
 pub fn aggregate<'a>(
     svk: &Svk,
@@ -118,6 +117,7 @@ pub fn aggregate<'a>(
     snarks: &[SnarkWitness],
     as_proof: Value<&'_ [u8]>,
 ) -> KzgAccumulator<G1Affine, Rc<Halo2Loader<'a>>> {
+    // Assign each snark's instance as witness.
     let assign_instances = |instances: &[Vec<Value<Fr>>]| {
         instances
             .iter()
@@ -227,7 +227,8 @@ impl AggregationCircuit {
             })
             .collect_vec();
 
-        // Create a proof that argues if old AccumulationScheme::Accumulators are properly accumulated into the new one, and returns the new one as output.
+        // Create a proof that argues if old AccumulationScheme::Accumulators are properly accumulated into the new one
+        // and returns the new one as output.
         let (accumulator, as_proof) = {
             let mut transcript = PoseidonTranscript::<NativeLoader, _>::new(Vec::new());
             let accumulator =

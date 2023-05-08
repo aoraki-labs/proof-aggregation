@@ -15,7 +15,7 @@ use halo2_proofs::{
     },
     transcript::{
         TranscriptReadBuffer, TranscriptWriterBuffer, EncodedChallenge,
-    }, dev::MockProver, SerdeFormat,
+    }, dev::MockProver,
 };
 use itertools::Itertools;
 use zkevm_circuits::{
@@ -162,6 +162,8 @@ fn gen_aggregation_evm_verifier(
 
     let instances = transcript.load_instances(num_instance);
     let proof = aggregation::PlonkVerifier::read_proof(&vk, &protocol, &instances, &mut transcript).unwrap();
+    // first the verifier verifies the new accumulator is correctly accumulated from old ones
+    // then the decider verifies if the accumulator itself is correct: do the pairing and check if the result is identity
     aggregation::PlonkVerifier::verify(&vk, &protocol, &instances, &proof).unwrap();
 
     evm::compile_yul(&loader.yul_code())
