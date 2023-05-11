@@ -15,8 +15,8 @@ use halo2_proofs::{
         Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     },
 };
-use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
+use rand::{SeedableRng, RngCore};
+use rand_chacha::{ChaCha20Rng, rand_core::OsRng};
 use rand_xorshift::XorShiftRng;
 use zkevm_circuits::{
     pi_circuit::{PiCircuit, PiTestCircuit, PublicData},
@@ -34,18 +34,18 @@ fn generate_publicdata<const MAX_TXS: usize, const MAX_CALLDATA: usize>() -> Pub
     let mut public_data = PublicData::default();
     let chain_id: u64 = mock::MOCK_CHAIN_ID.low_u64();
     public_data.chain_id = Word::from(chain_id);
-
+    
     let n_tx = MAX_TXS;
-    for i in 0..n_tx {
-        let eth_tx = eth_types::Transaction::from(mock::CORRECT_MOCK_TXS[i % 4].clone());
+    for _ in 0..n_tx {
+        let eth_tx = eth_types::Transaction::from(mock::CORRECT_MOCK_TXS[OsRng.next_u32() as usize % 4].clone());
         public_data.transactions.push(eth_tx);
     }
     public_data
 }
 
-pub fn gen_pi_circuit() -> PiTestCircuit<Fr, MAX_TXS, MAX_CALLDATA>{
+pub fn gen_pi_circuit(seed: u64) -> PiTestCircuit<Fr, MAX_TXS, MAX_CALLDATA>{
     
-    let mut rng = ChaCha20Rng::seed_from_u64(42);
+    let mut rng = ChaCha20Rng::seed_from_u64(seed);
     let randomness = Fr::random(&mut rng);
     let rand_rpi = Fr::random(&mut rng);
     let public_data = generate_publicdata::<MAX_TXS, MAX_CALLDATA>();

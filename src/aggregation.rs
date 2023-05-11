@@ -48,9 +48,9 @@ pub type PoseidonTranscript<L, S> =
 
 /// Snark contains the minimal information for verification
 pub struct Snark {
-    protocol: PlonkProtocol<G1Affine>,
-    instances: Vec<Vec<Fr>>,
-    proof: Vec<u8>,
+    pub protocol: PlonkProtocol<G1Affine>,
+    pub instances: Vec<Vec<Fr>>,
+    pub proof: Vec<u8>,
 }
 
 impl Snark {
