@@ -26,8 +26,8 @@ use zkevm_circuits::{
 // use std::fs;
 // use rand::rngs::OsRng;
 
-pub const MAX_TXS: usize = 10;
-pub const MAX_CALLDATA: usize = 128;
+pub const MAX_TXS: usize = 10 * 2;
+pub const MAX_CALLDATA: usize = 128 * 2;
 
 
 fn generate_publicdata<const MAX_TXS: usize, const MAX_CALLDATA: usize>() -> PublicData {

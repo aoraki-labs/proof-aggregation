@@ -1,9 +1,10 @@
 mod zkevm_circuit1;
+mod zkevm_circuit2;
 mod aggregation;
 
 use clap::{Parser, Subcommand};
-use eth_types::{Bytes, U256};
-use halo2_curves::{bn256::Fq, ff::PrimeField};
+use eth_types::Bytes;
+use halo2_curves::{bn256::Fq, ff::PrimeField, serde::SerdeObject};
 use halo2_proofs::{
     halo2curves::bn256::{Bn256, Fr, G1Affine},
     plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, ProvingKey, VerifyingKey},
@@ -17,19 +18,18 @@ use halo2_proofs::{
     },
     transcript::{
         TranscriptReadBuffer, TranscriptWriterBuffer, EncodedChallenge,
-    }, dev::MockProver, SerdeFormat,
+    }, dev::MockProver,
 };
 use itertools::Itertools;
 use serde::{Serialize, Deserialize};
-use zkevm_circuit1::InstancesExport;
 use zkevm_circuits::{
     pi_circuit::PiTestCircuit,
     util::SubCircuit,
 };
 use snark_verifier::{
-    system::halo2::{compile, transcript::evm::EvmTranscript, Config}, loader::{native::NativeLoader, evm::{EvmLoader, self, encode_calldata, ExecutorBuilder, Address, fe_to_u256, u256_to_fe}}, verifier::SnarkVerifier,
+    system::halo2::{compile, transcript::evm::EvmTranscript, Config}, loader::{native::NativeLoader, evm::{EvmLoader, self, encode_calldata, ExecutorBuilder, Address}}, verifier::SnarkVerifier,
 };
-use std::{fs::{self, File}, io::{Cursor, Read, Write}, rc::Rc, path::PathBuf};
+use std::{fs::{self, File}, io::{Cursor, Read, Write}, rc::Rc, iter};
 use rand::{rngs::OsRng, RngCore};
 use ark_std::{end_timer, start_timer};
 
@@ -147,13 +147,31 @@ fn gen_zkevm_circuit1_snark(params: &ParamsKZG<Bn256>) -> aggregation::Snark {
     aggregation::Snark::new(protocol, circuit.instance(), proof)
 }
 
-fn load_zkevm_circuit1_snark(
+fn load_zkevm_circuit1_snark_from_calldata(
     params: &ParamsKZG<Bn256>,
-    instances: Vec<Vec<Fr>>,
-    proof: Vec<u8>
+    proof_data: ProofData,
 ) -> aggregation::Snark {
     
     let circuit = zkevm_circuit1::gen_pi_circuit(OsRng.next_u64());
+    
+    let call_data = proof_data.call_data;
+    let num_instance = <PiTestCircuit::<
+        Fr,
+        { zkevm_circuit1::MAX_TXS },
+        { zkevm_circuit1::MAX_CALLDATA },
+    > as zkevm_circuit1::InstancesExport>::num_instance()[0];
+
+    let instances = vec![(0..num_instance)
+        .map(|i| {
+            let a = call_data[(i * 32)..(i + 1) * 32].iter().rev().cloned().collect_vec();
+            let mut dst = [0u8; 32];
+            dst.clone_from_slice(&a);
+            Fr::from_bytes(&dst).unwrap()
+        })
+        .collect_vec()];
+
+    let proof: Vec<u8> = call_data[(num_instance * 32)..].into();
+
     let vk = keygen_vk(params, &circuit).unwrap();
 
     let protocol = compile(
@@ -168,8 +186,97 @@ fn load_zkevm_circuit1_snark(
         ),
     );
 
+    // test
+    let proof_data = ProofData {
+        call_data: encode_calldata(&instances, &proof).into()
+    };
+
+    File::create("proof1-test.json")
+        .expect("open output_file")
+        .write_all(&serde_json::to_vec(&proof_data).unwrap())
+        .expect("write output_file");
+
     aggregation::Snark::new(protocol, instances, proof)
 }
+
+fn gen_zkevm_circuit2_snark(params: &ParamsKZG<Bn256>) -> aggregation::Snark {
+    
+    let circuit = zkevm_circuit2::gen_pi_circuit(OsRng.next_u64());
+
+    let pk = gen_pk(params, &circuit);
+    let protocol = compile(
+        params,
+        pk.get_vk(),
+        Config::kzg().with_num_instance(
+            <PiTestCircuit::<
+                Fr,
+                { zkevm_circuit2::MAX_TXS },
+                { zkevm_circuit2::MAX_CALLDATA },
+            > as zkevm_circuit2::InstancesExport>::num_instance()
+        ),
+    );
+
+    let proof = gen_proof::<
+        _,
+        _,
+        aggregation::PoseidonTranscript<NativeLoader, _>,
+        aggregation::PoseidonTranscript<NativeLoader, _>,
+    >(params, &pk, circuit.clone(), circuit.instance());
+    aggregation::Snark::new(protocol, circuit.instance(), proof)
+}
+
+fn load_zkevm_circuit2_snark_from_calldata(
+    params: &ParamsKZG<Bn256>,
+    proof_data: ProofData,
+) -> aggregation::Snark {
+    
+    let circuit = zkevm_circuit2::gen_pi_circuit(OsRng.next_u64());
+    
+    let call_data = proof_data.call_data;
+    let num_instance = <PiTestCircuit::<
+        Fr,
+        { zkevm_circuit2::MAX_TXS },
+        { zkevm_circuit2::MAX_CALLDATA },
+    > as zkevm_circuit2::InstancesExport>::num_instance()[0];
+
+    let instances = vec![(0..num_instance)
+        .map(|i| {
+            let a = call_data[(i * 32)..(i + 1) * 32].iter().rev().cloned().collect_vec();
+            let mut dst = [0u8; 32];
+            dst.clone_from_slice(&a);
+            Fr::from_bytes(&dst).unwrap()
+        })
+        .collect_vec()];
+
+    let proof: Vec<u8> = call_data[(num_instance * 32)..].into();
+
+    let vk = keygen_vk(params, &circuit).unwrap();
+
+    let protocol = compile(
+        params,
+        &vk,
+        Config::kzg().with_num_instance(
+            <PiTestCircuit::<
+                Fr,
+                { zkevm_circuit2::MAX_TXS },
+                { zkevm_circuit2::MAX_CALLDATA },
+            > as zkevm_circuit2::InstancesExport>::num_instance()
+        ),
+    );
+
+    // test
+    let proof_data = ProofData {
+        call_data: encode_calldata(&instances, &proof).into()
+    };
+
+    File::create("proof2-test.json")
+        .expect("open output_file")
+        .write_all(&serde_json::to_vec(&proof_data).unwrap())
+        .expect("write output_file");
+
+    aggregation::Snark::new(protocol, instances, proof)
+}
+
 
 
 fn gen_aggregation_evm_verifier(
@@ -260,8 +367,8 @@ fn evm_verify(deployment_code: Vec<u8>, instances: Vec<Vec<Fr>>, proof: Vec<u8>)
 
 #[derive(Serialize, Deserialize, Debug)]
 struct ProofData {
-    instances: Vec<U256>,
-    proof: Bytes,
+    // instances: Vec<U256>,
+    // proof: Bytes,
     call_data: Bytes,
 }
 
@@ -283,6 +390,10 @@ enum Commands {
     GenCircuit1Proof {
         proof_path: String
     },
+    // Gen EVM Circuit2 Proof
+    GenCircuit2Proof {
+        proof_path: String
+    },
     // Gen Aggregated Proof
     GenAggregatedProof {
         proof1_path: String,
@@ -293,14 +404,22 @@ enum Commands {
 
 fn main()  {
 
-    let (params, params_app) = gen_circuit_params::<0>(22, 17);
+    // let timer1 = start_timer!(|| "timer 1"); // 30.101s
+    // let (params, params_app) = gen_circuit_params::<0>(22, 17);
+    // end_timer!(timer1);
 
     let cli = Cli::parse();
     match cli.command {
+
         Some(Commands::ExportVerifier {
             yul_path
         }) => {
-            let zkevm_snarks = [(); 2].map(|_| gen_zkevm_circuit1_snark(&params_app));
+            let (params, params_app) = gen_circuit_params::<0>(22, 17);
+
+            let zkevm_snarks = [
+                gen_zkevm_circuit1_snark(&params_app),
+                gen_zkevm_circuit2_snark(&params_app)
+            ];
             let agg_circuit = aggregation::AggregationCircuit::new(&params, zkevm_snarks);
             let pk = gen_pk(&params, &agg_circuit);
             export_evm_verifier(
@@ -315,15 +434,26 @@ fn main()  {
         Some(Commands::GenCircuit1Proof {
             proof_path
         }) => {
+            let (params, params_app) = gen_circuit_params::<0>(22, 17);
+
             let snark = gen_zkevm_circuit1_snark(&params_app);
             let proof_data = ProofData {
-                instances: snark
-                    .instances
-                    .iter()
-                    .flatten()
-                    .map(|v| U256::from_little_endian(v.to_repr().as_ref()))
-                    .collect(),
-                proof: snark.proof.into(),
+                call_data: encode_calldata(&snark.instances, &snark.proof).into()
+            };
+
+            File::create(proof_path)
+                .expect("open output_file")
+                .write_all(&serde_json::to_vec(&proof_data).unwrap())
+                .expect("write output_file");
+        }
+
+        Some(Commands::GenCircuit2Proof {
+            proof_path
+        }) => {
+            let (params, params_app) = gen_circuit_params::<0>(22, 17);
+
+            let snark = gen_zkevm_circuit2_snark(&params_app);
+            let proof_data = ProofData {
                 call_data: encode_calldata(&snark.instances, &snark.proof).into()
             };
 
@@ -339,25 +469,27 @@ fn main()  {
             agg_proof_path
         }) => {
 
+            let (params, params_app) = gen_circuit_params::<0>(22, 17);
+
             let mut proof1_buf = String::new();
             File::open(proof1_path)
                 .expect("file to open")
                 .read_to_string(&mut proof1_buf)
                 .expect("read string");
             let proof1_data: ProofData = serde_json::from_str(&*proof1_buf).expect("invalid proof data");
-            load_zkevm_circuit1_snark(
-                &params_app,
-                proof1_data.instances,
-                proof1_data.proof.to_vec(),
-            );
+            
+            let mut proof2_buf = String::new();
+            File::open(proof2_path)
+                .expect("file to open")
+                .read_to_string(&mut proof2_buf)
+                .expect("read string");
+            let proof2_data: ProofData = serde_json::from_str(&*proof2_buf).expect("invalid proof data");
 
-            let a = proof1_data.instances[0];
-
-            let b = u256_to_fe(a);
-            // Fr::from_bytes(bytes);
-
-            let zkevm_snarks = [(); 2].map(|_| load_zkevm_circuit1_snark(&params_app));
-
+            let zkevm_snarks = [
+                load_zkevm_circuit1_snark_from_calldata(&params_app, proof1_data),
+                load_zkevm_circuit2_snark_from_calldata(&params_app, proof2_data)
+            ];
+            
             let agg_circuit = aggregation::AggregationCircuit::new(&params, zkevm_snarks);
             let pk = gen_pk(&params, &agg_circuit);
             let proof = gen_proof::<_, _, EvmTranscript<G1Affine, _, _, _>, EvmTranscript<G1Affine, _, _, _>>(
@@ -366,45 +498,48 @@ fn main()  {
                 agg_circuit.clone(),
                 agg_circuit.instances(),
             );
-            agg_circuit.instances();
+
+            let proof_data = ProofData {
+                call_data: encode_calldata(&agg_circuit.instances(), &proof).into()
+            };
+
+            File::create(agg_proof_path)
+                .expect("open output_file")
+                .write_all(&serde_json::to_vec(&proof_data).unwrap())
+                .expect("write output_file");
         
         }
 
         None => {
 
+            let (params, params_app) = gen_circuit_params::<0>(22, 17);
+            let timer2 = start_timer!(|| "timer 2"); // 97.902s
+            let zkevm_snarks = [(); 4].map(|_| gen_zkevm_circuit1_snark(&params_app));
+            end_timer!(timer2);
+        
+            let timer3 = start_timer!(|| "timer 3"); // 132.726s
+            let agg_circuit = aggregation::AggregationCircuit::new(&params, zkevm_snarks);
+            let pk = gen_pk(&params, &agg_circuit);
+            let deployment_code = gen_aggregation_evm_verifier(
+                &params,
+                pk.get_vk(),
+                aggregation::AggregationCircuit::num_instance(),
+                aggregation::AggregationCircuit::accumulator_indices(),
+            );
+            end_timer!(timer3);
+        
+            let timer4 = start_timer!(|| "timer 4"); // 274.205s
+            let proof = gen_proof::<_, _, EvmTranscript<G1Affine, _, _, _>, EvmTranscript<G1Affine, _, _, _>>(
+                &params,
+                &pk,
+                agg_circuit.clone(),
+                agg_circuit.instances(),
+            );
+            evm_verify(deployment_code, agg_circuit.instances(), proof); // gas_used = 603477
+            end_timer!(timer4);
         }
 
     }
-
-    // let timer1 = start_timer!(|| "timer 1"); // 30.101s
-    // let (params, params_app) = gen_circuit_params::<0>(23, 17);
-    // end_timer!(timer1);
-
-    let timer2 = start_timer!(|| "timer 2"); // 97.902s
-    let zkevm_snarks = [(); 4].map(|_| gen_zkevm_snark(&params_app));
-    end_timer!(timer2);
-
-    let timer3 = start_timer!(|| "timer 3"); // 132.726s
-    let agg_circuit = aggregation::AggregationCircuit::new(&params, zkevm_snarks);
-    let pk = gen_pk(&params, &agg_circuit);
-    let deployment_code = gen_aggregation_evm_verifier(
-        &params,
-        pk.get_vk(),
-        aggregation::AggregationCircuit::num_instance(),
-        aggregation::AggregationCircuit::accumulator_indices(),
-    );
-    end_timer!(timer3);
-
-    let timer4 = start_timer!(|| "timer 4"); // 274.205s
-    let proof = gen_proof::<_, _, EvmTranscript<G1Affine, _, _, _>, EvmTranscript<G1Affine, _, _, _>>(
-        &params,
-        &pk,
-        agg_circuit.clone(),
-        agg_circuit.instances(),
-    );
-    evm_verify(deployment_code, agg_circuit.instances(), proof); // gas_used = 603477
-    end_timer!(timer4);
-
 
     // // Change the propagated inner snark's instance
     // instances[0][0] += Fr::one();

@@ -1,4 +1,3 @@
-use ark_std::{start_timer, end_timer};
 use halo2_curves::bn256::{Bn256, Fq, Fr, G1Affine};
 use halo2_proofs::{
     circuit::{Layouter, SimpleFloorPlanner, Value},
