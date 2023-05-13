@@ -81,7 +81,6 @@ impl<const MAX_TXS: usize, const MAX_CALLDATA: usize> InstancesExport
     }
 }
 
-
 pub fn test_basic_pi_circuit() {
 
     const MAX_TXS: usize = 10;
@@ -162,10 +161,3 @@ pub fn test_basic_pi_circuit() {
     )
     .expect("failed to verify circuit");
 }
-
-
-// fn main()  {
-
-//     zkevm_circuit::test_basic_pi_circuit();
-
-// }

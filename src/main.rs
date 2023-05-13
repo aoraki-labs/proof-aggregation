@@ -4,7 +4,7 @@ mod aggregation;
 
 use clap::{Parser, Subcommand};
 use eth_types::Bytes;
-use halo2_curves::{bn256::Fq, ff::PrimeField, serde::SerdeObject};
+use halo2_curves::bn256::Fq;
 use halo2_proofs::{
     halo2curves::bn256::{Bn256, Fr, G1Affine},
     plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, ProvingKey, VerifyingKey},
@@ -29,7 +29,7 @@ use zkevm_circuits::{
 use snark_verifier::{
     system::halo2::{compile, transcript::evm::EvmTranscript, Config}, loader::{native::NativeLoader, evm::{EvmLoader, self, encode_calldata, ExecutorBuilder, Address}}, verifier::SnarkVerifier,
 };
-use std::{fs::{self, File}, io::{Cursor, Read, Write}, rc::Rc, iter};
+use std::{fs::{self, File}, io::{Cursor, Read, Write}, rc::Rc};
 use rand::{rngs::OsRng, RngCore};
 use ark_std::{end_timer, start_timer};
 
@@ -434,7 +434,7 @@ fn main()  {
         Some(Commands::GenCircuit1Proof {
             proof_path
         }) => {
-            let (params, params_app) = gen_circuit_params::<0>(22, 17);
+            let (_, params_app) = gen_circuit_params::<0>(22, 17);
 
             let snark = gen_zkevm_circuit1_snark(&params_app);
             let proof_data = ProofData {
@@ -450,7 +450,7 @@ fn main()  {
         Some(Commands::GenCircuit2Proof {
             proof_path
         }) => {
-            let (params, params_app) = gen_circuit_params::<0>(22, 17);
+            let (_, params_app) = gen_circuit_params::<0>(22, 17);
 
             let snark = gen_zkevm_circuit2_snark(&params_app);
             let proof_data = ProofData {
