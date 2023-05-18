@@ -1,3 +1,18 @@
-/target
-/generated
-proof-aggregation
+# circuit
+circuit/target
+circuit/generated
+circuit/proof-aggregation
+
+
+# contract
+contract/node_modules
+contract/.env
+contract/coverage
+contract/coverage.json
+contract/typechain
+contract/typechain-types
+contract/bin
+
+# Hardhat files
+contract/cache
+contract/artifacts

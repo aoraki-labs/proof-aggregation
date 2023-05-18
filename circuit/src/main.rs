@@ -172,7 +172,7 @@ fn load_zkevm_circuit1_snark_from_calldata(
 
     let proof: Vec<u8> = call_data[(num_instance * 32)..].into();
 
-    let vk = keygen_vk(params, &circuit).unwrap();
+    let vk: VerifyingKey<G1Affine> = keygen_vk(params, &circuit).unwrap();
 
     let protocol = compile(
         params,
@@ -400,6 +400,12 @@ enum Commands {
         proof2_path: String,
         agg_proof_path: String
     },
+    // Test Aggregated Proof
+    TestAggregatedProof {
+        proof1_path: String,
+        proof2_path: String,
+        agg_proof_path: String
+    },
 }
 
 fn main()  {
@@ -509,6 +515,82 @@ fn main()  {
                 .expect("write output_file");
         
         }
+
+        Some(Commands::TestAggregatedProof {
+            proof1_path,
+            proof2_path,
+            agg_proof_path
+        }) => {
+
+            let (params, params_app) = gen_circuit_params::<0>(22, 17);
+
+            let zkevm_snarks = [
+                gen_zkevm_circuit1_snark(&params_app),
+                gen_zkevm_circuit2_snark(&params_app)
+            ];
+            let agg_circuit = aggregation::AggregationCircuit::new(&params, zkevm_snarks);
+            let pk = gen_pk(&params, &agg_circuit);
+            let deployment_code = gen_aggregation_evm_verifier(
+                &params,
+                pk.get_vk(),
+                aggregation::AggregationCircuit::num_instance(),
+                aggregation::AggregationCircuit::accumulator_indices(),
+            );
+
+            let mut proof1_buf = String::new();
+            File::open(proof1_path)
+                .expect("file to open")
+                .read_to_string(&mut proof1_buf)
+                .expect("read string");
+            let proof1_data: ProofData = serde_json::from_str(&*proof1_buf).expect("invalid proof data");
+            
+            let mut proof2_buf = String::new();
+            File::open(proof2_path)
+                .expect("file to open")
+                .read_to_string(&mut proof2_buf)
+                .expect("read string");
+            let proof2_data: ProofData = serde_json::from_str(&*proof2_buf).expect("invalid proof data");
+
+            let zkevm_snarks = [
+                load_zkevm_circuit1_snark_from_calldata(&params_app, proof1_data),
+                load_zkevm_circuit2_snark_from_calldata(&params_app, proof2_data)
+            ];
+            
+            let agg_circuit = aggregation::AggregationCircuit::new(&params, zkevm_snarks);
+            let pk = gen_pk(&params, &agg_circuit);
+            let proof = gen_proof::<_, _, EvmTranscript<G1Affine, _, _, _>, EvmTranscript<G1Affine, _, _, _>>(
+                &params,
+                &pk,
+                agg_circuit.clone(),
+                agg_circuit.instances(),
+            );
+
+            let calldata = ProofData {
+                call_data: encode_calldata(&agg_circuit.instances(), &proof).into()
+            }.call_data;
+
+            let calldata_out: Bytes = calldata.clone().into();
+            println!("calldata {:x}", calldata_out);
+            let success = {
+                let mut evm = ExecutorBuilder::default()
+                    .with_gas_limit(u64::MAX.into())
+                    .build();
+        
+                let caller = Address::from_low_u64_be(0xfe);
+                let verifier = evm
+                    .deploy(caller, deployment_code.into(), 0.into())
+                    .address
+                    .unwrap();
+                let result = evm.call_raw(caller, verifier, calldata.to_vec().into(), 0.into());
+        
+                dbg!(result.gas_used);
+        
+                !result.reverted
+            };
+            assert!(success);
+        
+        }
+
 
         None => {
 
