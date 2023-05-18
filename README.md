@@ -1,6 +1,6 @@
 ## Proof Aggregator Demo
 
-This repo demonstrates a basic proof aggregator use case: put multiple proofs into one to reduce onchain verification fee. It comes with an aggregator and two zkevm rollups. Below is a step by step tutorial.
+This repo demonstrates a basic proof aggregator use case: put multiple proofs into one to reduce onchain verification fee. The idea is from [vitalik's article](https://vitalik.ca/general/2022/09/17/layer_3.html). It comes with an aggregator and two zkevm rollups. Below is a step by step tutorial.
 
 ### Preparation
 
@@ -29,21 +29,21 @@ mv .env.example .env
 
 ### Going Through the Process
 
-1. deploy aggregator
+1. deploy the aggregator
 
 ```bash
 # in contract folder
 npx hardhat run ./scripts/1_deploy_aggregator.ts --network mumbai
 ```
 
-2. register rollup1 rollup2
+2. register rollup1 & rollup2 onchain
 
 ```bash
 # in contract folder
 npx hardhat run ./scripts/2_deploy_and_register_rollups.ts --network mumbai
 ```
 
-3. export verifier
+3. export aggregation verifier from circuit
 
 ```bash
 # in circuit folder
@@ -57,30 +57,30 @@ npx hardhat run ./scripts/2_deploy_and_register_rollups.ts --network mumbai
 npx hardhat run ./scripts/3_deploy_verifier.ts --network mumbai
 ```
 
-5. gen proof
+5. gen proof for rollup1 & rollup2
 
 ```bash
 # in circuit folder
-# gen proof for circuit1
+# gen proof for rollup1
 ./proof-aggregation gen-circuit1-proof proof1.json
-# gen proof for circuit2
+# gen proof for rollup2
 ./proof-aggregation gen-circuit2-proof proof2.json
 ```
 
-6. submit proof1 proof2
+6. submit proof1 & proof2 onchain
 
 ```bash
 npx hardhat run ./scripts/4_submit_proofs.ts --network mumbai
 ```
 
-7. gen aggregate
+7. get proof1 and proof2 then gen aggregate proof
 
 ```bash
 # in circuit folder
 ./proof-aggregation gen-aggregated-proof proof1.json proof2.json agg.json
 ```
 
-8. submit proof
+8. submit aggregated proof
 
 ```bash
 # in contract folder
